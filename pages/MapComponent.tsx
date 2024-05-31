@@ -6,10 +6,14 @@ import { Ionicons, MaterialCommunityIcons } from '../components/IconSets';
 import ActionButton from 'react-native-action-button-fork1';
 import IntentLauncher from 'react-native-intent-launcher-fork1';
 import { useDispatch } from 'react-redux';
-import {  } from '../redux/stateSlice';
+import { setLocationSaved, setMapSettingsModalVisible, setMapType } from '../redux/stateSlice';
 import Theme from '../constants/Theme';
 import { calculateDistance, hexToRgb } from '../utils/utilfuncs';
 import MapSettingsModalComponent from '../components/mapSettingsModal';
+import { DeviceDataType, Region } from '../constants/types';
+import { useSelector } from 'react-redux';
+import { RootState } from '../redux/store';
+import { setMapLocationSettingsFirebase } from '../firebase/functions';
 
 const MapComponent = () => {
     const [lastTouchTime, setLastTouchTime] = useState<number | null>(null);
@@ -18,8 +22,20 @@ const MapComponent = () => {
     
     // 현재 표시되어야 하는 buoy_id를 저장하는 상태
     const [showDeviceId, setShowDeviceId] = useState<string | null>(null);
-    const { fetchedWData, mapType, setMapType, isMapSettingsModalVisible, setMapSettingsModalVisible, cellularOn, wifiOn, locationSaved, setLocationSaved, setMapLocationSettingsFirebase, seeAllDevices, seeDistanceLines } = useAuth();
     const [showUpdateLocationButton, setShowUpdateLocationButton] = useState(false);
+
+    // Redux
+    const locationSaved = useSelector((state:RootState) => state.auth.locationSaved);
+    const user = useSelector((state:RootState) => state.auth.user);
+    const fetchedWData = useSelector((state:RootState) => state.auth.fetchedWData);
+    const seeAllDevices = useSelector((state:RootState) => state.auth.seeAllDevices);
+    const mapType = useSelector((state:RootState) => state.auth.mapType);
+    const seeDistanceLines = useSelector((state:RootState) => state.auth.seeDistanceLines);
+    const wifiOn = useSelector((state:RootState) => state.auth.wifiOn);
+    const cellularOn = useSelector((state:RootState) => state.auth.cellularOn);
+    const isMapSettingsModalVisible = useSelector((state:RootState) => state.auth.isMapSettingsModalVisible);
+
+    const dispatch = useDispatch();
 
     useEffect(() => {
         const watchId = Geolocation.watchPosition(
@@ -30,7 +46,7 @@ const MapComponent = () => {
                     return;
                 }
                 mapView.current?.animateToCoordinate({ latitude, longitude });
-                setLocationSaved({...locationSaved, latitude:latitude, longitude:longitude })
+                dispatch(setLocationSaved({...locationSaved, latitude:latitude, longitude:longitude }))
                 setShowUpdateLocationButton(false)
             },
             (error) => {
@@ -48,7 +64,9 @@ const MapComponent = () => {
                                 text: 'Go to GPS Settings',
                                 onPress: () => {
                                     IntentLauncher.startActivity({
-                                        action: 'android.settings.LOCATION_SOURCE_SETTINGS'
+                                        action: 'android.settings.LOCATION_SOURCE_SETTINGS',
+                                        category: '',
+                                        data: ''
                                     });
                                 }
                                 },
@@ -73,7 +91,7 @@ const MapComponent = () => {
 
         return () => {
             Geolocation.clearWatch(watchId);
-            setMapLocationSettingsFirebase()
+            setMapLocationSettingsFirebase(user,locationSaved)
         };
     }, [lastTouchTime]);
 
@@ -183,7 +201,7 @@ const MapComponent = () => {
 
     const deviceMarkers = useMemo(() => {
         if (!fetchedWData || fetchedWData.length === 0) return null;
-        return fetchedWData.map((device:DeviceDataType, i) => {
+        return fetchedWData.map((device:DeviceDataType, i: any) => {
             let deviceCoord = device.location;
             if(!isInsideMap(deviceCoord, region?.coveringRegion)) {
                 deviceCoord = adjustDevicePosition(deviceCoord, region.coveringRegion);
@@ -218,10 +236,10 @@ const MapComponent = () => {
         if (!locationSaved || !fetchedWData) return null;
         const userLat = locationSaved.latitude!;
         const userLon = locationSaved.longitude!;
-        return fetchedWData.map((device: DeviceDataType, i) => {
+        return fetchedWData.map((device: DeviceDataType, i: React.Key | null | undefined) => {
             const deviceLat = device.location.latitude!;
             const deviceLon = device.location.longitude!;
-            const distance = calculateDistance(userLat, userLon, deviceLat, deviceLon);
+            const distance:any = calculateDistance(userLat, userLon, deviceLat, deviceLon);
             if (distance <= 3) {
                 const midLat = (userLat + deviceLat) / 2;
                 const midLon = (userLon + deviceLon) / 2;
@@ -252,7 +270,6 @@ const MapComponent = () => {
     return (
         <View style={styles.allContainer}>
             <NaverMapView 
-                setLocationTrackingMode={0}
                 showsMyLocationButton={false}
                 compass={true}
                 scaleBar={true}
@@ -299,31 +316,31 @@ const MapComponent = () => {
                 <ActionButton.Item 
                     buttonColor={Theme.COLORS.BUTTON_COLOR} 
                     title={'Settings'}
-                    onPress={() => {setMapSettingsModalVisible(true);}}>
+                    onPress={() => {dispatch(setMapSettingsModalVisible(true));}}>
                     <Ionicons name="settings-sharp" color={'#fff'} size={25}/>
                 </ActionButton.Item>
                 <ActionButton.Item 
                     buttonColor={Theme.COLORS.BUTTON_COLOR} 
                     title={'BASIC'}
-                    onPress={() => {setMapType(0);}}>
+                    onPress={() => {dispatch(setMapType(0));}}>
                     <MaterialCommunityIcons name="map" color={'#fff'} size={25}/>
                 </ActionButton.Item>
                 <ActionButton.Item 
                     buttonColor={Theme.COLORS.BUTTON_COLOR} 
                     title={'SATELLITE'}
-                    onPress={() => {setMapType(2);}}>
+                    onPress={() => {dispatch(setMapType(2));}}>
                     <MaterialCommunityIcons name="satellite-variant" color={'#fff'} size={25}/>
                 </ActionButton.Item>
                 <ActionButton.Item 
                     buttonColor={Theme.COLORS.BUTTON_COLOR} 
                     title={'HYBRID'}
-                    onPress={() => {setMapType(3);}}>
+                    onPress={() => {dispatch(setMapType(3));}}>
                     <MaterialCommunityIcons name="satellite" color={'#fff'} size={25}/>
                 </ActionButton.Item>
                 <ActionButton.Item 
                     buttonColor={Theme.COLORS.BUTTON_COLOR} 
                     title={'TERRAIN'}
-                    onPress={() => {setMapType(4);}}>
+                    onPress={() => {dispatch(setMapType(4));}}>
                     <MaterialCommunityIcons name="map-legend" color={'#fff'} size={25}/>
                 </ActionButton.Item>
             </ActionButton>

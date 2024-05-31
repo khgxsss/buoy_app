@@ -1,6 +1,12 @@
+plugins {
+    id 'com.android.application'
+    id 'com.google.gms.google-services'
+}
+
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
+apply plugin: "com.google.gms.google-services"
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -112,6 +118,8 @@ android {
     }
 }
 
+
+
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
@@ -126,6 +134,7 @@ dependencies {
     // Add the dependencies for any other desired Firebase products
     implementation 'com.firebaseui:firebase-ui-auth:7.2.0'
     implementation project(':react-native-firebaseui-auth')
+//    implementation 'com.google.android.gms:play-services-location:21.1.0'
 
 
     if (hermesEnabled.toBoolean()) {

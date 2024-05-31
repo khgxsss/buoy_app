@@ -101,7 +101,6 @@ export const setMapLocationSettingsFirebase = async (user:User,locationSaved:loc
       const userDocRef = firestore().collection('users').doc(user.uid);
   
       const userDoc = await userDocRef.get();
-  
       // Map Zoom °»½Å
       if (userDoc.exists) {
         await userDocRef.update({

@@ -4,7 +4,8 @@ import { User } from 'react-native-firebaseui-auth';
 import { DeviceDataType, deviceType, FetchedDataType, serverLoginInputType, locationSavedType, appDimensionType,  Region, MAP_TYPE, oauth_config } from '../constants/types';
 
 interface AuthState {
-  user: User | null;
+  // user: User | null;
+  user: User;
   activeTab: string;
   mapType: number;
   fetchedWData: DeviceDataType[];
@@ -23,7 +24,17 @@ interface AuthState {
 }
 
 const initialState: AuthState = {
-  user: null,
+  user: {
+    uid: 'fXPdoIp6FpdQbCXlITK2C1gBiQz2',
+    displayName: 'RCN',
+    photoURL: 'photoURL',
+    email: 'rcnappdev@gmail.com',
+    phoneNumber: 'phoneNumber',
+    providerId: 'providerId',
+    isNewUser: false,
+    creationTimestamp: 1698038178344,
+    lastSignInTimestamp: 1698038178344
+  },
   activeTab: 'Map',
   mapType: 0,
   fetchedWData: [],
@@ -58,7 +69,7 @@ export const authSlice = createSlice({
   name: 'auth',
   initialState,
   reducers: {  // sync
-    setUser: (state, action: PayloadAction<User | null>) => {
+    setUser: (state, action: PayloadAction<User>) => {
       state.user = action.payload;
     },
     setActiveTab: (state, action: PayloadAction<string>) => {
@@ -107,6 +118,7 @@ export const authSlice = createSlice({
       state.serverLoginInput = action.payload;
     }
   },
+  // 아래 부분은 다른 파일에서 구현
 //   extraReducers: (builder) => { // async
 //     builder
 //       .addCase(signIn.fulfilled, (state, action) => {

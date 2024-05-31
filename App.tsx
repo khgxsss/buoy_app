@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
+  Button,
+  Linking,
+  Modal,
+  Platform,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -13,19 +17,29 @@ import init from 'react_native_mqtt';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Home from './pages/Home';
-import ParkingLot from './pages/MapComponent';
-import ViewHistory from './pages/ViewHistory';
-import { useDispatch } from 'react-redux';
+// import ViewHistory from './pages/ViewHistory';
+import { useDispatch, useSelector } from 'react-redux';
 import { setDeviceData } from './redux/deviceSlice';
+import { setCellularOn, setUser, setWifiOn } from './redux/stateSlice';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import MapComponent from './pages/MapComponent';
+import { updateFirebaseStorage } from './firebase/functions';
+import NetInfo from "@react-native-community/netinfo";
+import { RootState } from './redux/store';
+import IntentLauncher from 'react-native-intent-launcher-fork1';
+import Theme from './constants/Theme';
+import LoginComponent from './pages/Login';
 
 const Tab = createBottomTabNavigator();
 
 const App: React.FC = () => {
 
+  const [isModalVisible, setModalVisible] = React.useState(false);
+  const isWifiModalVisible = useSelector((state:RootState) => state.auth.isWifiModalVisible);
+  
   const dispatch = useDispatch();
 
-  // MQTT Å¬¶óÀÌ¾ðÆ® ÃÊ±âÈ­ ¹× ¼³Á¤
+  // MQTT í´ë¼ì´ì–¸íŠ¸ ì´ˆê¸°í™” ë° ì„¤ì •
   const initializeMQTT = () => {
     init({
       size: 10000,
@@ -40,33 +54,50 @@ const App: React.FC = () => {
   useEffect(() => {
     initializeMQTT();
 
-    // Å¬¶óÀÌ¾ðÆ® »ý¼º ¹× ¿É¼Ç ¼³Á¤
+    // í´ë¼ì´ì–¸íŠ¸ ìƒì„± ë° ì˜µì…˜ ì„¤ì •
     const client = new Paho.MQTT.Client('ws://14.50.159.2:1884/', 'client2');
 
-    // ¿¬°á ·Î½ºÆ® ½Ã Ã³¸®
+    // ì—°ê²° ë¡œìŠ¤íŠ¸ ì‹œ ì²˜ë¦¬
     client.onConnectionLost = (error: { errorCode: number, errorMessage: string,invocationContext:string }) => {
       if (error.errorCode !== 0) {
         console.log('onConnectionLost:' + error.errorMessage);
         if (error.errorCode ===7){
           console.log("Need Wifi or Cellular activated")
         }
-        // ¿©±â¿¡ Àç¿¬°á ·ÎÁ÷À» Ãß°¡ÇÒ ¼ö ÀÖ½À´Ï´Ù.
+        reconnect(client);  // ì—°ê²° ì‹¤íŒ¨ ì‹œ ìž¬ì—°ê²° ì‹œë„
       }
     };
 
-    // ¸Þ½ÃÁö ¼ö½Å ½Ã Ã³¸®
+    const reconnect = (client: { connect: (arg0: { onSuccess: () => void; onFailure: (reconnectError: any) => void; useSSL: boolean; }) => void; subscribe: (arg0: string) => void; }) => {
+      setTimeout(() => {
+        console.log("Attempting to reconnect...");
+        client.connect({
+          onSuccess: () => {
+            console.log('Reconnected successfully.');
+            client.subscribe('GIOT-GW/UL/#');
+          },
+          onFailure: reconnectError => {
+            console.log('Reconnection failed:', reconnectError.errorMessage);
+            reconnect(client);  // ìž¬ê·€ì ìœ¼ë¡œ ìž¬ì—°ê²° ì‹œë„
+          },
+          useSSL: false
+        });
+      }, 2000);  // 2ì´ˆ í›„ì— ìž¬ì—°ê²° ì‹œë„
+    };
+
+    // ë©”ì‹œì§€ ìˆ˜ì‹  ì‹œ ì²˜ë¦¬
     client.onMessageArrived = (message: { topic: string; payloadString: string }) => {
       console.log('onMessageArrived:' + message.payloadString);
       
-      const dataArray = JSON.parse(message.payloadString); // ¸Þ½ÃÁö°¡ ¹è¿­ÀÌ¶ó°í °¡Á¤
+      const dataArray = JSON.parse(message.payloadString); // ë©”ì‹œì§€ê°€ ë°°ì—´ì´ë¼ê³  ê°€ì •
     
-      // °¢ macAddr¿¡ ´ëÇØ »óÅÂ¸¦ ¾÷µ¥ÀÌÆ®
+      // ê° macAddrì— ëŒ€í•´ ìƒíƒœë¥¼ ì—…ë°ì´íŠ¸
       dataArray.forEach((data: { macAddr: string }) => {
         dispatch(setDeviceData({ macAddr: data.macAddr, data }));
       });
     };
 
-    // MQTT ¼­¹ö¿¡ ¿¬°á
+    // MQTT ì„œë²„ì— ì—°ê²°
     client.connect({ 
       onSuccess: () => {
         console.log('Connected');
@@ -78,6 +109,7 @@ const App: React.FC = () => {
         if (error.errorCode ===7){
           console.log("Need Wifi or Cellular activated")
         }
+        reconnect(client);  // ì—°ê²° ì‹¤íŒ¨ ì‹œ ìž¬ì—°ê²° ì‹œë„
       }
     });
 
@@ -88,54 +120,107 @@ const App: React.FC = () => {
     };
   }, []);
 
+  // wifi ì™€ cellular on off ê°ì§€
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(state => {
+      if (state.isInternetReachable) {
+        setModalVisible(false);
+        switch (state.type) {
+          case 'wifi':
+            dispatch(setWifiOn(true))
+            dispatch(setCellularOn(false))
+            break
+          case 'cellular':
+            dispatch(setCellularOn(true))
+            dispatch(setWifiOn(false))
+            break
+          default:
+            dispatch(setCellularOn(false))
+            dispatch(setWifiOn(false))
+            break;
+        }
+      }else {
+        dispatch(setWifiOn(false))
+        dispatch(setCellularOn(false))
+        setModalVisible(true)
+      }
+      if (isWifiModalVisible) {
+        if (state.type !== 'wifi') {
+          setModalVisible(true);
+        }else {
+          setModalVisible(false)
+        }
+      }
+    });
+
+    // ì»´í¬ë„ŒíŠ¸ ì–¸ë§ˆìš´íŠ¸ ì‹œ ì´ë²¤íŠ¸ ë¦¬ìŠ¤ë„ˆ ì œê±°
+    return () => {
+        unsubscribe();
+    };
+  }, []);
+
+  const handleOpenSettings = () => {
+    if (Platform.OS === 'ios') {
+        // iOS ì„¤ì • í™”ë©´ìœ¼ë¡œ ì´ë™
+        Linking.openURL('app-settings:');
+    } else {
+      // ì•ˆë“œë¡œì´ë“œ Wi-Fi ì„¤ì • í™”ë©´ìœ¼ë¡œ ì´ë™
+      IntentLauncher.startActivity({
+        action: 'android.settings.WIFI_SETTINGS',
+        category: '',
+        data: ''
+      });
+    }
+  };
+
   useEffect(() => {
     const loadUser = async () => {
       const storedUser = await AsyncStorage.getItem('user');
       if (storedUser) {
-        setUser(JSON.parse(storedUser));
-        await updateFirebaseStorage(JSON.parse(storedUser));
+        dispatch(setUser(JSON.parse(storedUser)));
+        await updateFirebaseStorage(JSON.parse(storedUser), dispatch);
       }
     };
   
     loadUser();
   }, []);  
 
-  useEffect(() => {
-
-    const eventListener = AuthEventEmitter.addListener(
-      AuthEvents.AUTH_STATE_CHANGED,
-      event => {
-        console.log(event)
-        // if (event.user) {
-        //   setUser(event.user)
-        // }
-      }
-    );
-    return () => {
-      eventListener.remove();
-    };
-  }, []);
-
   return (
-    <NavigationContainer>
-      <Tab.Navigator>
-        <Tab.Screen name="Device" component={Home} options={{
+    <>
+      <Modal
+          visible={isModalVisible}
+          transparent={true}
+          animationType="slide"
+      >
+          <View style={{ width:'100%', height:'100%', position:'absolute', justifyContent: 'center', alignItems: 'center', backgroundColor:'rgba(0,0,0,0.5)' }}>
+              <View style={{ width: 300, padding: 20, backgroundColor: 'white', borderRadius: 10 }}>
+                  <Text>{!isWifiModalVisible ? 'Needs Internet Connection':'Needs wifi Connection'}</Text>
+                  <Text>{!isWifiModalVisible ? 'Please turn on Cellular data or Wifi.':'Please turn on Wifi.'}{'\n'}</Text>
+                  <Button title="Go to Settings" onPress={handleOpenSettings} color={Theme.COLORS.BUTTON_COLOR}/>
+              </View>
+          </View>
+      </Modal>
+      <LoginComponent/>
+      <NavigationContainer>
+        <Tab.Navigator>
+          <Tab.Screen name="Device" component={Home} options={{
+              tabBarIcon: ({ color, size }) => (
+                <MaterialIcons name="home" color={color} size={size} />
+              ),
+            }}/>
+          <Tab.Screen name="Map" component={MapComponent} options={{
             tabBarIcon: ({ color, size }) => (
-              <MaterialIcons name="home" color={color} size={size} />
+              <MaterialIcons name="map" color={color} size={size} />
             ),
           }}/>
-        <Tab.Screen name="Map" component={MapComponent} options={{
-          tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="local-parking" color={color} size={size} />
-          ),
-        }}/>
-        {/* <Tab.Screen name="View History" component={ViewHistory} options={{
-          tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="history" color={color} size={size} />
-          ),
-        }}/> */}
-      </Tab.Navigator>
-    </NavigationContainer>
+          {/* <Tab.Screen name="View History" component={ViewHistory} options={{
+            tabBarIcon: ({ color, size }) => (
+              <MaterialIcons name="history" color={color} size={size} />
+            ),
+          }}/> */}
+        </Tab.Navigator>
+      </NavigationContainer>
+    </>
   );
 };
 
